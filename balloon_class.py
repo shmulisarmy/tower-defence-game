@@ -36,7 +36,8 @@ class Balloon:
 
 
     def draw(self):
-        left_corner = (self.col * CUBE_SIZE + self.grid_offset[0], self.row * CUBE_SIZE + self.grid_offset[1])
+        from main import pos_to_camera_pos
+        left_corner = pos_to_camera_pos((self.col * CUBE_SIZE + self.grid_offset[0], self.row * CUBE_SIZE + self.grid_offset[1]))
         pygame.draw.rect(screen, self.get_color(), (left_corner[0], left_corner[1], balloon_size, balloon_size))
 
 

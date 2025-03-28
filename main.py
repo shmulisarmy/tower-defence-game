@@ -13,16 +13,50 @@ from balloon_class import Balloon
 pygame.init()
 
 
-ballons = [Balloon(6, i%3) for i in range(20)]
+balloons = [Balloon(6, i%3) for i in range(20)]
+
+
+def get_balloon_mean():
+    alive_ballons = list(get_alive_ballons())
+    if alive_ballons:
+        balloon_pos_y_mean = sum(balloon.row * CUBE_SIZE + balloon.grid_offset[1] for balloon in alive_ballons) / len(alive_ballons)
+        balloon_pos_x_mean = sum(balloon.col * CUBE_SIZE + balloon.grid_offset[0] for balloon in alive_ballons) / len(alive_ballons)
+    else:
+        balloon_pos_y_mean = 0
+        balloon_pos_x_mean = 0
+    print(f'{balloon_pos_y_mean = }, {balloon_pos_x_mean = }')
+    
+    return balloon_pos_y_mean, balloon_pos_x_mean
 
 game = SimpleNamespace(lives = 150, buttons = [
-    Button(300-50, 20, lambda: ballons.extend([Balloon(6, 0), Balloon(6, 1), Balloon(6, 2)]), (0, 0, 255), (0, 0, 0), width=100, height=30, radius=10, padding=5, text="next wave"),
+    Button(300-50, 20, lambda: balloons.extend([Balloon(6, 0), Balloon(6, 1), Balloon(6, 2)]), (0, 0, 255), (0, 0, 0), width=100, height=30, radius=10, padding=5, text="next wave"),
     Button(450-50, 20, lambda: print('clicked'), (0, 0, 255), (0, 0, 0), width=100, height=30, radius=10, padding=5, text="pause"),
     Button(600-50, 20, lambda: print('clicked'), (0, 0, 255), (0, 0, 0), width=100, height=30, radius=10, padding=5, text="resume"),
 ], balloons_killed = 0)
 
 
+camera_man = SimpleNamespace(x=0, y=0, )
 
+
+def camera_man_follow(pos_x: int, pos_y: int):
+    travel_x = camera_man.x - pos_x
+    if travel_x > 5:
+        travel_x = 5
+    elif travel_x < -5:
+        travel_x = -5
+    travel_y = camera_man.y - pos_y
+    if travel_y > 5:
+        travel_y = 5
+    elif travel_y < -5:
+        travel_y = -5
+    camera_man.x += travel_x
+    camera_man.y += travel_y
+    
+
+def pos_to_camera_pos(pos: tuple[int, int]) -> tuple[int, int]:
+    rv = (pos[0] - (camera_man.x + WINDOW_WIDTH//2), pos[1] - (camera_man.y + WINDOW_HEIGHT//2))
+    print(f'{pos = }, {rv = }')
+    return rv
 
 
 
@@ -31,7 +65,7 @@ def draw_path():
     for row in range(len(board)):
         for col in range(len(board[row])):
             if board[row][col] != 0:
-                left_corner = (col * CUBE_SIZE, row * CUBE_SIZE)
+                left_corner = pos_to_camera_pos((col * CUBE_SIZE, row * CUBE_SIZE))
                 pygame.draw.rect(screen, (0, 0, 0), (left_corner[0], left_corner[1], CUBE_SIZE, CUBE_SIZE))
 
 
@@ -42,10 +76,8 @@ def draw_path():
 
 
 
-
-
 def get_alive_ballons() -> Iterable['Balloon']:
-    return (ballon for ballon in ballons if ballon.is_alive())
+    return (ballon for ballon in balloons if ballon.is_alive())
 
     # def get_covered_squares(self) -> Iterable[tuple[int, int]]:
     #     for neighbor in get_neighbors(self.row, self.col):
@@ -53,6 +85,7 @@ def get_alive_ballons() -> Iterable['Balloon']:
 
 
 
+monkey_image = pygame.image.load('Monkey.png')
 
 
 @dataclass
@@ -70,12 +103,15 @@ class Tower:
 
 
     def draw(self):
+
+        scaled_monkey_image = pygame.transform.scale(monkey_image, (self.core_size*3, self.core_size*3))
+
         #first draw the attack range
         s = pygame.Surface((self.attack_radius*2, self.attack_radius*2), pygame.SRCALPHA)
         pygame.draw.circle(s, (192, 192, 192, 100), (self.attack_radius, self.attack_radius), self.attack_radius)
-        screen.blit(s, (self.x - self.attack_radius, self.y - self.attack_radius))
+        screen.blit(s, pos_to_camera_pos((self.x - self.attack_radius, self.y - self.attack_radius)))
         #then draw the tower
-        pygame.draw.circle(screen, self.color, (self.x, self.y), self.core_size)
+        screen.blit(scaled_monkey_image, pos_to_camera_pos((self.x - self.core_size*1.5, self.y - self.core_size*1.5)))
 
 
     def get_covered_squares(self) -> list[tuple[int, int]]:
@@ -100,12 +136,12 @@ class Tower:
 towers = [Tower(180, 250), Tower(400, 400), Tower(240, 400)]
 
 def draw():
-    # screen.fill((255, 255, 255))
+    screen.fill((255, 255, 255))
     grass_image = pygame.image.load('grass.png')
     for row in range(MATRIX_SIZE):
         for col in range(MATRIX_SIZE):
             if board[row][col] == 0:
-                screen.blit(grass_image, (col*CUBE_SIZE, row*CUBE_SIZE))
+                screen.blit(grass_image, pos_to_camera_pos((col*CUBE_SIZE, row*CUBE_SIZE)))
 
 
     for button in game.buttons:
@@ -136,22 +172,11 @@ def draw():
     pygame.display.update()
 
 
-
+clock = pygame.time.Clock()
 running = True
 while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    for tower in towers:
-        tower: Tower
-        tower.attack_farthest_balloon()
-
-    for balloon in get_alive_ballons():
-        time.sleep(0.01)
-        balloon.move()
-
-
+    clock.tick(60)
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -160,7 +185,29 @@ while running:
                 button: Button
                 if button.is_clicked(event.pos):
                     button.onclick()
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                camera_man.x -= 30
+            elif event.key == pygame.K_RIGHT:
+                camera_man.x += 30
+            elif event.key == pygame.K_UP:
+                camera_man.y -= 30
+            elif event.key == pygame.K_DOWN:
+                camera_man.y += 30
 
+
+    print(f"camera_man.x: {camera_man.x}, camera_man.y: {camera_man.y}")
+
+    balloon_pos_y_mean, balloon_pos_x_mean = get_balloon_mean()
+
+    camera_man_follow(balloon_pos_x_mean, balloon_pos_y_mean)
+
+    for tower in towers:
+        tower: Tower
+        tower.attack_farthest_balloon()
+
+    for balloon in get_alive_ballons():
+        balloon.move()
 
 
     draw()
